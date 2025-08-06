@@ -73,7 +73,7 @@ def main(context):
         bpy.ops.object.modifier_apply(modifier="Smooth by Angle")
     else:
         #auto smooth - assume 30 degrees until someone complains
-        bpy.ops.object.shade_smooth_by_angle(angle=0.523599)
+        bpy.ops.object.shade_smooth(use_auto_smooth = True)
         
     
     bpy.ops.object.editmode_toggle()

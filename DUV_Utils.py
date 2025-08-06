@@ -53,71 +53,90 @@ def get_orientation(context):
     for face in bm.faces:
         if face.select:
             faces.append(face)
-    
+    # Check for valid faces and loops
+    if not faces or not faces[0].loops:
+        return None
+    # Initialize min/max to first loop's UV
+    xmin = xmax = faces[0].loops[0][uv_layer].uv.x
+    ymin = ymax = faces[0].loops[0][uv_layer].uv.y
     for face in faces:
-        xmin, xmax = face.loops[0][uv_layer].uv.x, face.loops[0][uv_layer].uv.x
-        ymin, ymax = face.loops[0][uv_layer].uv.y, face.loops[0][uv_layer].uv.y
-
-    for vert in face.loops:
-        xmin = min(xmin, vert[uv_layer].uv.x)
-        xmax = max(xmax, vert[uv_layer].uv.x)
-        ymin = min(ymin, vert[uv_layer].uv.y)
-        ymax = max(ymax, vert[uv_layer].uv.y)
+        for vert in face.loops:
+            xmin = min(xmin, vert[uv_layer].uv.x)
+            xmax = max(xmax, vert[uv_layer].uv.x)
+            ymin = min(ymin, vert[uv_layer].uv.y)
+            ymax = max(ymax, vert[uv_layer].uv.y)
 
     # corners:
     # 3 2
     # 0 1
 
-    bound0 = Vector((xmin,ymin))
-    bound1 = Vector((xmax,ymin))
-    bound2 = Vector((xmax,ymax))
-    bound3 = Vector((xmin,ymax))
-    middle = Vector(( ((xmax+xmin)/2)- bound0.x,((ymax+ymin)/2)-bound0.y ))
+
+    # If no faces are selected, return early
+    if xmin is None or xmax is None or ymin is None or ymax is None:
+        return None
+
+    bound0 = Vector((xmin, ymin))
+    bound1 = Vector((xmax, ymin))
+    bound2 = Vector((xmax, ymax))
+    bound3 = Vector((xmin, ymax))
+    middle = Vector((((xmax + xmin) / 2) - bound0.x, ((ymax + ymin) / 2) - bound0.y))
+
+    # Initialize corners to None
+    corner0 = None
+    corner1 = None
+    corner2 = None
+    corner3 = None
 
     distance = middle.length
-    corner0 = faces[0].loops[0]
     for f in faces:
         for loop in f.loops:
             loop_uv = loop[uv_layer]
-            vertuv = Vector((loop_uv.uv.x - bound0.x,loop_uv.uv.y - bound0.y))
+            vertuv = Vector((loop_uv.uv.x - bound0.x, loop_uv.uv.y - bound0.y))
             tempdistance = vertuv.length
-            if tempdistance <= distance:
+            if corner0 is None or tempdistance <= distance:
                 distance = tempdistance
                 corner0 = loop
 
     distance = middle.length
-    corner1 = faces[0].loops[0]
     for f in faces:
         for loop in f.loops:
             loop_uv = loop[uv_layer]
-            vertuv = Vector((loop_uv.uv.x - bound1.x,loop_uv.uv.y - bound1.y))
+            vertuv = Vector((loop_uv.uv.x - bound1.x, loop_uv.uv.y - bound1.y))
             tempdistance = vertuv.length
-            if tempdistance <= distance:
+            if corner1 is None or tempdistance <= distance:
                 distance = tempdistance
                 corner1 = loop
 
     distance = middle.length
-    corner2 = faces[0].loops[0]
     for f in faces:
         for loop in f.loops:
             loop_uv = loop[uv_layer]
-            vertuv = Vector((loop_uv.uv.x - bound2.x,loop_uv.uv.y - bound2.y))
+            vertuv = Vector((loop_uv.uv.x - bound2.x, loop_uv.uv.y - bound2.y))
             tempdistance = vertuv.length
-            if tempdistance <= distance:
+            if corner2 is None or tempdistance <= distance:
                 distance = tempdistance
                 corner2 = loop
 
     distance = middle.length
-    corner3 = faces[0].loops[0]
     for f in faces:
         for loop in f.loops:
             loop_uv = loop[uv_layer]
-            vertuv = Vector((loop_uv.uv.x - bound3.x,loop_uv.uv.y - bound3.y))
+            vertuv = Vector((loop_uv.uv.x - bound3.x, loop_uv.uv.y - bound3.y))
             tempdistance = vertuv.length
-            if tempdistance <= distance:
+            if corner3 is None or tempdistance <= distance:
                 distance = tempdistance
                 corner3 = loop
 
+    # If any corner is None after calculation, return early
+    if corner0 is None or corner1 is None or corner2 is None or corner3 is None:
+        return None
+
+
+
+
+    # Only run orientation logic if all corners are valid
+    if any(c is None for c in [corner0, corner1, corner2, corner3]):
+        return None
 
     #orientations:
     # 3 2   0 3   1 0   2 1
@@ -307,10 +326,21 @@ def donut_uv_fixer(context):
         f.select = True      
     #get start loop (this makes sure we loop in the right direction)
     startloop = None
+    
+    if not edge_list:
+    # No boundary edges found, can't proceed
+        return False
 
     for l in edge_list[0].link_loops:
         if l.face.select is True:
             startloop = l
+    # Check for valid startloop before proceeding
+    if startloop is None:
+        # No valid start loop found, can't proceed
+        for f in faces:
+            f.select = True
+        bmesh.update_edit_mesh(obj.data)
+        return False
     #create sorted verts from start loop
     sorted_vert_list = list()
     for f in faces:
@@ -387,6 +417,9 @@ def square_fit(context):
         
         #pick a random edge for where the topology cut will start
         #active_edge = boundary_edge_list[0]
+        if not boundary_edge_list:
+            # No boundary edges found, can't proceed
+            return False
         active_edge = boundary_edge_list[random.randint(0, len(boundary_edge_list)-1)]      
         bm.select_history.add(active_edge)
         
@@ -499,6 +532,12 @@ def square_fit(context):
     for l in edge_list[0].link_loops:
         if l.face.select is True:
             startloop = l
+    if startloop is None:
+        # No valid start loop found, can't proceed
+        for f in faces:
+            f.select = True
+        bmesh.update_edit_mesh(obj.data)
+        return False
     #create sorted verts from start loop
     sorted_vert_list = list()
     for f in faces:
